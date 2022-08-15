@@ -206,12 +206,17 @@ def getAveragePath(path, align_to_first=True, integer=False, truncate=False):
     points_x = []
     points_y = []
     depths = []
-    threshold = 0
-    for frame in path:
-        for y_coordinate in range(len(frame)):
-            for x_coordinate in range(len(frame[y_coordinate])):
-                threshold += frame[y_coordinate][x_coordinate]
-    threshold /= len(path)
+    points_x_cache = []
+    points_y_cache = []
+    depths_cache = []
+    threshold = 10 # use const
+    first_over_threshold = False
+
+    # for frame in path:
+    #     for y_coordinate in range(len(frame)):
+    #         for x_coordinate in range(len(frame[y_coordinate])):
+    #             threshold += frame[y_coordinate][x_coordinate]
+    # threshold /= len(path)
     # print(threshold)
     # 算一下压力的平均值只留下大于某一个数值的点
     for frame in path:  # 一次采集
@@ -222,6 +227,14 @@ def getAveragePath(path, align_to_first=True, integer=False, truncate=False):
             for x_coordinate in range(len(frame[y_coordinate])):
                 sum_force += frame[y_coordinate][x_coordinate]
         if sum_force > 2 * threshold:  # if(sum_force > 0)  有效采集的阈值
+            first_over_threshold = True
+            if points_x_cache:
+                points_x += points_x_cache
+                points_y += points_y_cache
+                depths += depths_cache
+                points_x_cache.clear()
+                points_y_cache.clear()
+                depths_cache.clear()
             for y_coordinate in range(len(frame)):
                 for x_coordinate in range(len(frame[y_coordinate])):
                     rate = frame[y_coordinate][x_coordinate] / sum_force
@@ -234,6 +247,20 @@ def getAveragePath(path, align_to_first=True, integer=False, truncate=False):
                 points_x.append(x_average)
                 points_y.append(35 - y_average)
             depths.append(sum_force)
+        elif first_over_threshold and sum_force > 0:
+            for y_coordinate in range(len(frame)):
+                for x_coordinate in range(len(frame[y_coordinate])):
+                    rate = frame[y_coordinate][x_coordinate] / sum_force
+                    x_average += rate * x_coordinate  # 取平均值作为该压力点坐标
+                    y_average += rate * y_coordinate
+            if integer:
+                points_x_cache.append(int(x_average * 10))
+                points_y_cache.append(int((35 - y_average) * 10))
+            else:
+                points_x_cache.append(x_average)
+                points_y_cache.append(35 - y_average)
+            depths_cache.append(sum_force)
+        
     if len(points_x) <= 0:
         return np.array(points_x), np.array(points_y), np.array(depths)
     if align_to_first:
@@ -1427,24 +1454,46 @@ def migrateDirections():
     too_long_data_filenames = np.load(os.path.join(BASE_DIR, 'too_long.npy'))
 
     fig = plt.figure(figsize=(8, 6), dpi=100)
-    ax1 = plt.subplot(141, polar=True)
-    ax2 = plt.subplot(142, polar=True)
-    ax3 = plt.subplot(143, polar=True)
-    ax4 = plt.subplot(144, polar=True)
+    ax1 = plt.subplot(251, polar=True)
+    ax2 = plt.subplot(252, polar=True)
+    ax3 = plt.subplot(253, polar=True)
+    ax4 = plt.subplot(254, polar=True)
+    ax5 = plt.subplot(255, polar=True)
+    ax6 = plt.subplot(256)
+    ax7 = plt.subplot(257)
+    ax8 = plt.subplot(258)
+    ax9 = plt.subplot(259)
+    ax10 = plt.subplot(2,5,10)
+    elapsed_with_dir = []
+    speed_with_dir = []
+    amplitude_with_dir = []
+    max_pressure_with_dir = []
+    avg_pressure_with_dir = []
+    elapsed_all = []
+    speed_all = []
+    amplitude_all = []
+    max_pressure_all = []
+    avg_pressure_all = []
+    dir_all = []
     for num_d in [4, 6, 8, 10, 12]:
+        print("direction {} begin".format(num_d))
         angles = DIRECTIONS_MAP[str(num_d)]
         angles = np.concatenate((angles, [angles[0]]))
         elapsed = [[] for _ in range(num_d)]
+        speed = [[] for _ in range(num_d)]
         amplitude = [[] for _ in range(num_d)]
         max_pressure = [[] for _ in range(num_d)]
         avg_pressure = [[] for _ in range(num_d)]
         for dir in os.listdir(BASE_DIR):
+        # for dir in ["hz"]:
+            print("person {} begin".format(dir))
             if dir == 'test' or not os.path.isdir(os.path.join(BASE_DIR, dir)):
                 continue
             for i, c in enumerate(DIRECTIONS_MAP[str(num_d)]):
                 for j in range(5):
                     path_name = os.path.join(BASE_DIR, dir, '0', str(num_d),
                                              str(i) + '_{}.npy'.format(j))
+                    print(path_name)
                     if path_name in error_data_filenames or path_name in too_long_data_filenames:
                         continue
                     path = np.load(path_name)
@@ -1459,43 +1508,157 @@ def migrateDirections():
                     start, end = getLongestDirection(path)
 
                     elapsed[i].append(len(x))
-                    amplitude[i].append(
-                        np.sqrt((x[end] - x[start])**2 +
-                                (y[end] - y[start])**2))
+                    tmp_amplitude = np.sqrt((x[end] - x[start])**2 + (y[end] - y[start])**2)
+                    amplitude[i].append(tmp_amplitude)
+                    if end - start > 0:
+                        speed[i].append(tmp_amplitude / (end - start))
+                    else:
+                        print("end = start, error")
+                        speed[i].append(0)
                     max_pressure[i].append(np.max(d))
                     avg_pressure[i].append(np.average(d))
+        print("direction {} plot".format(num_d))
         # elapsed
         avg_ = []
         for i_ in range(num_d):
             avg_.append(np.average(elapsed[i_]))
+        elapsed_with_dir.append(np.average(avg_))
         avg_ = np.concatenate((avg_, [avg_[0]]))
         ax1.plot(angles, avg_, label=str(num_d))
         ax1.set_theta_zero_location('E')
         ax1.legend()
-        # amplitude
+        # speed
         avg_ = []
         for i_ in range(num_d):
-            avg_.append(np.average(amplitude[i_]))
+            avg_.append(np.average(speed[i_]))
+        speed_with_dir.append(np.average(avg_))
         avg_ = np.concatenate((avg_, [avg_[0]]))
         ax2.plot(angles, avg_, label=str(num_d))
         ax2.set_theta_zero_location('E')
         ax2.legend()
-        # max pressure
+        # amplitude
         avg_ = []
         for i_ in range(num_d):
-            avg_.append(np.average(max_pressure[i_]))
+            avg_.append(np.average(amplitude[i_]))
+        amplitude_with_dir.append(np.average(avg_))
         avg_ = np.concatenate((avg_, [avg_[0]]))
         ax3.plot(angles, avg_, label=str(num_d))
         ax3.set_theta_zero_location('E')
         ax3.legend()
-        # avg pressure
+        # max pressure
         avg_ = []
         for i_ in range(num_d):
-            avg_.append(np.average(avg_pressure[i_]))
+            avg_.append(np.average(max_pressure[i_]))
+        max_pressure_with_dir.append(np.average(avg_))
         avg_ = np.concatenate((avg_, [avg_[0]]))
         ax4.plot(angles, avg_, label=str(num_d))
         ax4.set_theta_zero_location('E')
         ax4.legend()
+        # avg pressure
+        avg_ = []
+        for i_ in range(num_d):
+            avg_.append(np.average(avg_pressure[i_]))
+        avg_pressure_with_dir.append(np.average(avg_))
+        avg_ = np.concatenate((avg_, [avg_[0]]))
+        ax5.plot(angles, avg_, label=str(num_d))
+        ax5.set_theta_zero_location('E')
+        ax5.legend()
+
+        for i_ in range(num_d):
+            print("length {}".format(len(elapsed[i_])))
+            dir_all += [num_d for _ in range(len(elapsed[i_]))]
+            elapsed_all += elapsed[i_]
+            speed_all += speed[i_]
+            amplitude_all += amplitude[i_]
+            max_pressure_all += max_pressure[i_]
+            avg_pressure_all += avg_pressure[i_]
+    dir_p = [4, 6, 8, 10, 12]
+    df_1 = pd.DataFrame({
+        'elapsed_time': elapsed_all,
+        'direction': dir_all,
+    })
+    df_2 = pd.DataFrame({
+        'elapsed_time_avg': elapsed_with_dir,
+        'direction': dir_p,
+    })
+    sns.boxplot(x='direction',
+                y='elapsed_time',
+                data=df_1,
+                ax=ax6)
+    sns.pointplot(x="direction",
+                y="elapsed_time_avg",
+                ci=None,
+                data=df_2,
+                ax=ax6)
+    df_1 = pd.DataFrame({
+        'speed': speed_all,
+        'direction': dir_all,
+    })
+    df_2 = pd.DataFrame({
+        'speed_avg': speed_with_dir,
+        'direction': dir_p,
+    })
+    sns.boxplot(x='direction',
+                y='speed',
+                data=df_1,
+                ax=ax7)
+    sns.pointplot(x="direction",
+                y="speed_avg",
+                ci=None,
+                data=df_2,
+                ax=ax7)
+    df_1 = pd.DataFrame({
+        'amplitude': amplitude_all,
+        'direction': dir_all,
+    })
+    df_2 = pd.DataFrame({
+        'amplitude_avg': amplitude_with_dir,
+        'direction': dir_p,
+    })
+    sns.boxplot(x='direction',
+                y='amplitude',
+                data=df_1,
+                ax=ax8)
+    sns.pointplot(x="direction",
+                y="amplitude_avg",
+                ci=None,
+                data=df_2,
+                ax=ax8)
+    df_1 = pd.DataFrame({
+        'max_pressure': max_pressure_all,
+        'direction': dir_all,
+    })
+    df_2 = pd.DataFrame({
+        'max_pressure_avg': max_pressure_with_dir,
+        'direction': dir_p,
+    })
+    sns.boxplot(x='direction',
+                y='max_pressure',
+                data=df_1,
+                ax=ax9)
+    sns.pointplot(x="direction",
+                y="max_pressure_avg",
+                ci=None,
+                data=df_2,
+                ax=ax9)
+    df_1 = pd.DataFrame({
+        'avg_pressure': avg_pressure_all,
+        'direction': dir_all,
+    })
+    df_2 = pd.DataFrame({
+        'avg_pressure_avg': avg_pressure_with_dir,
+        'direction': dir_p,
+    })
+    sns.boxplot(x='direction',
+                y='avg_pressure',
+                data=df_1,
+                ax=ax10)
+    sns.pointplot(x="direction",
+                y="avg_pressure_avg",
+                ci=None,
+                data=df_2,
+                ax=ax10)
+    
     plt.show()
 
 
