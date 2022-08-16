@@ -209,7 +209,7 @@ def getAveragePath(path, align_to_first=True, integer=False, truncate=False):
     points_x_cache = []
     points_y_cache = []
     depths_cache = []
-    threshold = 10 # use const
+    threshold = 10  # use const
     first_over_threshold = False
 
     # for frame in path:
@@ -260,7 +260,7 @@ def getAveragePath(path, align_to_first=True, integer=False, truncate=False):
                 points_x_cache.append(x_average)
                 points_y_cache.append(35 - y_average)
             depths_cache.append(sum_force)
-        
+
     if len(points_x) <= 0:
         return np.array(points_x), np.array(points_y), np.array(depths)
     if align_to_first:
@@ -405,7 +405,7 @@ def getXYExtrema(path):
 
 def getLongestDirection(path):
     x, y, d = getAveragePath(path)
-    corners = getCorners(x, y, d)
+    corners = _getCorners(x, y, d)
     return _getLongestDirection(x, y, d, corners)
 
 
@@ -465,10 +465,10 @@ def _getLongestDirection(x, y, d, corners):
 
 def getCorners(path):
     x, y, d = getAveragePath(path)
-    return getCorners(x, y, d)
+    return _getCorners(x, y, d)
 
 
-def getCorners(x, y, d):
+def _getCorners(x, y, d):
     """
     description
     ---------
@@ -649,35 +649,27 @@ def getHVDirections(path):
     return np.array(directions)
 
 
-def getSingleDirectionConfidenceList(v):
+def getSingleDirectionConfidenceList(v, num_d, mix=False):
     gauss_dict = {}
-    with open('gauss_direction_mix.json', 'r') as file:
-        gauss_dict = json.load(file)
+    if mix:
+        with open('gauss_direction_mix.json', 'r') as file:
+            gauss_dict = json.load(file)
+    else:
+        with open('gauss_direction_{num_d}.json'.format(num_d=num_d),
+                  'r') as file:
+            gauss_dict = json.load(file)
 
     ang = np.arctan2(v[1], v[0])
-    # if abs(ang) > 7 * np.pi / 8:
-    #     return 0
-    # ans = np.argmin([abs(ang - std_ang) for std_ang in EIGHT_DIRECTIONS])
     confidence_list = []
-    for ix in range(8):
-        if ix == 0:
-            val = np.exp(
-                -((ang - gauss_dict['0'][1]) / gauss_dict['0'][2])**2 / 2)
-            val_adj = np.exp(-(
-                (ang - 2 * np.pi - gauss_dict['0'][1]) / gauss_dict['0'][2])**2
-                             / 2)
-            confidence_list.append((gauss_dict['0'][0], max(val, val_adj)))
-        elif ix == 7:
-            val = np.exp(
-                -((ang - gauss_dict['7'][1]) / gauss_dict['7'][2])**2 / 2)
-            val_adj = np.exp(-(
-                (ang + 2 * np.pi - gauss_dict['7'][1]) / gauss_dict['7'][2])**2
-                             / 2)
-            confidence_list.append((gauss_dict['7'][0], max(val, val_adj)))
-        else:
-            confidence_list.append((gauss_dict[str(ix)][0],
-                                    np.exp(-((ang - gauss_dict[str(ix)][1]) /
-                                             gauss_dict[str(ix)][2])**2 / 2)))
+    for ix in range(num_d):
+        val = np.exp(
+            -((ang - gauss_dict[str(ix)][1]) / gauss_dict[str(ix)][2])**2 / 2)
+        val_adj_up = np.exp(-((ang - 2 * np.pi - gauss_dict[str(ix)][1]) /
+                              gauss_dict[str(ix)][2])**2 / 2)
+        val_adj_dn = np.exp(-((ang + 2 * np.pi - gauss_dict[str(ix)][1]) /
+                              gauss_dict[str(ix)][2])**2 / 2)
+        confidence_list.append(
+            (gauss_dict[str(ix)][0], max(val, val_adj_up, val_adj_dn)))
     return sorted(confidence_list, key=lambda t: t[1], reverse=True)
 
 
@@ -700,7 +692,7 @@ def get8Directions(path):
     x, y, d = getAveragePath(path)
     if (len(x) <= 0):
         return [], np.array([2]), []
-    simplified_dir = getCorners(path)
+    simplified_dir = _getCorners(x, y, d)
     directions_index = []
     directions = []
     directions_weights = []
@@ -709,6 +701,56 @@ def get8Directions(path):
     for u, v in list(zip(simplified_dir[:-1], simplified_dir[1:])):
         singleDCList.append(
             getSingleDirectionConfidenceList((x[v] - x[u], y[v] - y[u])))
+
+    PROBABILITY_THRESHOLD = 0.1
+    # TODO: Return a confidence list
+    for i, (u,
+            v) in enumerate(list(zip(simplified_dir[:-1],
+                                     simplified_dir[1:]))):
+        closest_direction = singleDCList[i][0][0]
+        if len(directions) <= 0 or closest_direction != directions[-1]:
+            directions_index.append((u, v))
+            directions.append(closest_direction)
+            directions_weights.append((x[v] - x[u])**2 + (y[v] - y[u])**2)
+        elif len(directions) > 0 and directions[-1] == closest_direction:
+            directions_index[-1] = (directions_index[-1][0], v)
+            directions_weights[-1] = (x[v] - x[directions_index[-1][0]])**2 + (
+                y[v] - y[directions_index[-1][0]])**2
+    directions_weights = np.array(directions_weights) / np.sum(
+        directions_weights)
+
+    return directions_index, np.array(directions), directions_weights
+
+
+def getNumberOfDirections(path, num_d):
+    """
+    description
+    ---------
+    Get all directions adopted to given number of directions
+    
+    param
+    -------
+    path: path containing matrices
+
+    Returns
+    -------
+    Tuple of directions indexes, arrays of directions, weights of directions
+
+    """
+
+    x, y, d = getAveragePath(path)
+    if (len(x) <= 0):
+        return [], np.array([2]), []
+    simplified_dir = _getCorners(x, y, d)
+    directions_index = []
+    directions = []
+    directions_weights = []
+
+    singleDCList = []
+    for u, v in list(zip(simplified_dir[:-1], simplified_dir[1:])):
+        singleDCList.append(
+            getSingleDirectionConfidenceList((x[v] - x[u], y[v] - y[u]), num_d,
+                                             False))
 
     PROBABILITY_THRESHOLD = 0.1
     # TODO: Return a confidence list
@@ -1463,7 +1505,7 @@ def migrateDirections():
     ax7 = plt.subplot(257)
     ax8 = plt.subplot(258)
     ax9 = plt.subplot(259)
-    ax10 = plt.subplot(2,5,10)
+    ax10 = plt.subplot(2, 5, 10)
     elapsed_with_dir = []
     speed_with_dir = []
     amplitude_with_dir = []
@@ -1485,7 +1527,7 @@ def migrateDirections():
         max_pressure = [[] for _ in range(num_d)]
         avg_pressure = [[] for _ in range(num_d)]
         for dir in os.listdir(BASE_DIR):
-        # for dir in ["hz"]:
+            # for dir in ["hz"]:
             print("person {} begin".format(dir))
             if dir == 'test' or not os.path.isdir(os.path.join(BASE_DIR, dir)):
                 continue
@@ -1508,7 +1550,8 @@ def migrateDirections():
                     start, end = getLongestDirection(path)
 
                     elapsed[i].append(len(x))
-                    tmp_amplitude = np.sqrt((x[end] - x[start])**2 + (y[end] - y[start])**2)
+                    tmp_amplitude = np.sqrt((x[end] - x[start])**2 +
+                                            (y[end] - y[start])**2)
                     amplitude[i].append(tmp_amplitude)
                     if end - start > 0:
                         speed[i].append(tmp_amplitude / (end - start))
@@ -1581,15 +1624,12 @@ def migrateDirections():
         'elapsed_time_avg': elapsed_with_dir,
         'direction': dir_p,
     })
-    sns.boxplot(x='direction',
-                y='elapsed_time',
-                data=df_1,
-                ax=ax6)
+    sns.boxplot(x='direction', y='elapsed_time', data=df_1, ax=ax6)
     sns.pointplot(x="direction",
-                y="elapsed_time_avg",
-                ci=None,
-                data=df_2,
-                ax=ax6)
+                  y="elapsed_time_avg",
+                  ci=None,
+                  data=df_2,
+                  ax=ax6)
     df_1 = pd.DataFrame({
         'speed': speed_all,
         'direction': dir_all,
@@ -1598,15 +1638,8 @@ def migrateDirections():
         'speed_avg': speed_with_dir,
         'direction': dir_p,
     })
-    sns.boxplot(x='direction',
-                y='speed',
-                data=df_1,
-                ax=ax7)
-    sns.pointplot(x="direction",
-                y="speed_avg",
-                ci=None,
-                data=df_2,
-                ax=ax7)
+    sns.boxplot(x='direction', y='speed', data=df_1, ax=ax7)
+    sns.pointplot(x="direction", y="speed_avg", ci=None, data=df_2, ax=ax7)
     df_1 = pd.DataFrame({
         'amplitude': amplitude_all,
         'direction': dir_all,
@@ -1615,15 +1648,8 @@ def migrateDirections():
         'amplitude_avg': amplitude_with_dir,
         'direction': dir_p,
     })
-    sns.boxplot(x='direction',
-                y='amplitude',
-                data=df_1,
-                ax=ax8)
-    sns.pointplot(x="direction",
-                y="amplitude_avg",
-                ci=None,
-                data=df_2,
-                ax=ax8)
+    sns.boxplot(x='direction', y='amplitude', data=df_1, ax=ax8)
+    sns.pointplot(x="direction", y="amplitude_avg", ci=None, data=df_2, ax=ax8)
     df_1 = pd.DataFrame({
         'max_pressure': max_pressure_all,
         'direction': dir_all,
@@ -1632,15 +1658,12 @@ def migrateDirections():
         'max_pressure_avg': max_pressure_with_dir,
         'direction': dir_p,
     })
-    sns.boxplot(x='direction',
-                y='max_pressure',
-                data=df_1,
-                ax=ax9)
+    sns.boxplot(x='direction', y='max_pressure', data=df_1, ax=ax9)
     sns.pointplot(x="direction",
-                y="max_pressure_avg",
-                ci=None,
-                data=df_2,
-                ax=ax9)
+                  y="max_pressure_avg",
+                  ci=None,
+                  data=df_2,
+                  ax=ax9)
     df_1 = pd.DataFrame({
         'avg_pressure': avg_pressure_all,
         'direction': dir_all,
@@ -1649,16 +1672,13 @@ def migrateDirections():
         'avg_pressure_avg': avg_pressure_with_dir,
         'direction': dir_p,
     })
-    sns.boxplot(x='direction',
-                y='avg_pressure',
-                data=df_1,
-                ax=ax10)
+    sns.boxplot(x='direction', y='avg_pressure', data=df_1, ax=ax10)
     sns.pointplot(x="direction",
-                y="avg_pressure_avg",
-                ci=None,
-                data=df_2,
-                ax=ax10)
-    
+                  y="avg_pressure_avg",
+                  ci=None,
+                  data=df_2,
+                  ax=ax10)
+
     plt.show()
 
 
@@ -1678,37 +1698,41 @@ def gaussianDirections():
 
     """
 
-    avg_angles = [[] for _ in range(8)]
+    error_data_filenames = np.load(os.path.join(BASE_DIR, 'error.npy'))
+    too_long_data_filenames = np.load(os.path.join(BASE_DIR, 'too_long.npy'))
+
+    avg_angles = [[] for _ in range(int(args.direction))]
     for dir in os.listdir(BASE_DIR):
-        if not 'ch_data_' + str('8') + '_dir_' in dir:
+        if dir == "test" or not os.path.isdir(os.path.join(BASE_DIR, dir)):
             continue
-        for i, c in enumerate(DIRECTIONS_MAP['8']):
+        for i, c in enumerate(DIRECTIONS_MAP[args.direction]):
             for j in range(5):
-                try:
-                    path = np.load(
-                        os.path.join(BASE_DIR, dir,
-                                     str(i) + '_{}.npy'.format(j)))
-                    x, y, d = getAveragePath(path,
-                                             align_to_first=False,
-                                             integer=False)
-                    x = gaussian_filter1d(x, sigma=5)
-                    y = gaussian_filter1d(y, sigma=5)
-                    start, end = getLongestDirection(path)
-                    # start, end = getStartAndEnd(args.direction, x, y, i)
-                except:
+                path_name = os.path.join(BASE_DIR, dir, '0', args.direction,
+                                         str(i) + '_{}.npy'.format(j))
+                print(path_name)
+                if path_name in error_data_filenames or path_name in too_long_data_filenames:
                     continue
+                path = np.load(path_name)
+                x, y, d = getAveragePath(path,
+                                         align_to_first=False,
+                                         integer=False)
+                if len(x) <= 0:
+                    continue
+                x = gaussian_filter1d(x, sigma=5)
+                y = gaussian_filter1d(y, sigma=5)
+                start, end = getLongestDirection(path)
                 if end < 0:
                     continue
                 angle = np.arctan2(y[end] - y[start], x[end] - x[start])
                 # if angle > (DIRECTIONS_MAP[args.direction][-1] + np.pi) / 2:
-                if i == 0 and angle > 0:
+                if c == -np.pi and angle > 0:
                     angle -= 2 * np.pi
 
                 avg_angles[i].append(angle)
 
-    with open('gauss_direction.json', 'w') as output:
+    with open('gauss_direction_' + args.direction + '.json', 'w') as output:
         gauss_dict = {}
-        for ix in range(8):
+        for ix in range(int(args.direction)):
             gauss_dict[ix] = (ix, np.mean(avg_angles[ix]),
                               np.std(avg_angles[ix]))
         json.dump(gauss_dict, output)
@@ -3032,27 +3056,33 @@ def calSingleAcc():
     top_1 = 0
     total = 0
 
+    error_data_filenames = np.load(os.path.join(BASE_DIR, 'error.npy'))
+    too_long_data_filenames = np.load(os.path.join(BASE_DIR, 'too_long.npy'))
+
     for dir in os.listdir(BASE_DIR):
-        print(dir)
+        if dir == "test" or not os.path.isdir(os.path.join(BASE_DIR, dir)):
+            continue
         for i, c in enumerate(DIRECTIONS_MAP[args.direction]):
             for j in range(5):
-                try:
-                    path = np.load(
-                        os.path.join(BASE_DIR, dir, '0', str(args.direction),
-                                     str(i) + '_' + str(j) + '.npy'))
-                except:
+                path_name = os.path.join(BASE_DIR, dir, '0', args.direction,
+                                         str(i) + '_{}.npy'.format(j))
+                print(path_name)
+                if path_name in error_data_filenames or path_name in too_long_data_filenames:
                     continue
+                path = np.load(path_name)
                 x, y, d = getAveragePath(path)
                 if (len(x) <= 0):
                     continue
                 try:
-                    directions_index, redundant_8directions, weights = get8Directions(
-                        path)
+                    directions_index, redundant_8directions, weights = getNumberOfDirections(
+                        path, int(args.direction))
                     usr_direction = redundant_8directions[np.argmax(weights)]
                     path_directions = [
                         np.array([
-                            np.cos(EIGHT_DIRECTIONS[usr_direction]),
-                            np.sin(EIGHT_DIRECTIONS[usr_direction])
+                            np.cos(
+                                DIRECTIONS_MAP[args.direction][usr_direction]),
+                            np.sin(
+                                DIRECTIONS_MAP[args.direction][usr_direction])
                         ])
                     ]
                 except Exception as e:
@@ -3060,7 +3090,7 @@ def calSingleAcc():
                     print(str(e))
                     continue
                 candidates = []
-                for std_dir in EIGHT_DIRECTIONS:
+                for std_dir in DIRECTIONS_MAP[args.direction]:
                     candidates.append(
                         dtw(path_directions,
                             [np.array([np.cos(std_dir),
@@ -3221,7 +3251,7 @@ if __name__ == '__main__':
     # plotTendency()
     # plotAmplitude()
     # plotPressure()
-    migrateDirections()
+    # migrateDirections()
     # plotDoubleDirectionsCutToSingle()
     # plotMultipleDirectionsCutToSingle()
     # plotMultipleDirectionsCutToSingleIncludedAngles()
@@ -3231,6 +3261,6 @@ if __name__ == '__main__':
     # gaussianDirections()
     # gaussianDirectionsMultiple()
     # visualizeGaussianDirections()
-    # calSingleAcc()
+    calSingleAcc()
     # migrateSingleAndMultiple()
     # pointsNumber()
