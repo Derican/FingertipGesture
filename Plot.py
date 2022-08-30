@@ -24,7 +24,7 @@ from mpl_toolkits.mplot3d import axes3d
 
 BASE_DIR = 'study1'
 STUDY1_DIR = 'study1'
-STUDY2_DIR = 'new_data'
+STUDY2_DIR = 'study2'
 LETTER = [chr(y) for y in range(97, 123)]
 EIGHT_DIRECTIONS = [
     -np.pi, -3 * np.pi / 4, -np.pi / 2, -np.pi / 4, 0, np.pi / 3, np.pi / 2,
@@ -651,6 +651,7 @@ def _getCorners(x, y, d):
 
 
 def getHVDirections(path):
+
     def chooseClosestDirection(v):
         # ang = np.arctan2(v[1], v[0])
         # if abs(abs(ang) - np.pi) < abs(abs(ang) - np.pi / 2):
@@ -1911,6 +1912,7 @@ def gaussianDirectionsMultiple():
     None
 
     """
+
     def getAngle(x1, x2, y1, y2):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
@@ -2011,6 +2013,7 @@ def plotDoubleDirectionsCutToSingle():
     None
     
     """
+
     def getAngle(x1, x2, y1, y2):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
@@ -2092,6 +2095,7 @@ def plotDoubleDirectionsCutToSingle():
 
 
 def getIdentifiedGodPath(path, t_l):
+
     def angleDist(ang1, ang2):
         return 1 - (np.dot(ang1, ang2) / np.linalg.norm(ang1) /
                     np.linalg.norm(ang2))
@@ -2140,6 +2144,7 @@ def plotMultipleDirectionsCutToSingle():
     None
 
     """
+
     def getAngle(x1, x2, y1, y2):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
@@ -2267,6 +2272,7 @@ def plotMultipleDirectionsCutToSingleIncludedAngles():
     None
 
     """
+
     def getAngle(x1, x2, y1, y2):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
@@ -2393,6 +2399,7 @@ def plotMultipleDirectionsCutToSingleAmplitude():
     None
 
     """
+
     def getAngle(x1, x2, y1, y2):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
@@ -2477,6 +2484,7 @@ def plotMultipleDirectionsCutToSinglePressure():
     None
 
     """
+
     def getAngle(x1, x2, y1, y2):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
@@ -2578,6 +2586,7 @@ def plotMultipleDirectionsCutToSinglePressureExtrema():
     None
 
     """
+
     def getAngle(x1, x2, y1, y2):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if angle > (DIRECTIONS_MAP['8'][-1] + np.pi) / 2:
@@ -2688,6 +2697,7 @@ def plotMultipleDirectionsCutToSinglePressureExtrema():
 
 
 def migrateSingleAndMultiple():
+
     def getAngle(x1, x2, y1, y2, expected):
         angle = np.arctan2(y2 - y1, x2 - x1)
         if expected < 0 and angle > 0 and abs(angle - expected) >= np.pi:
@@ -3293,6 +3303,7 @@ def calCrossAcc(duel):
 
 
 def calSingleAcc():
+
     def angleDist(ang1, ang2):
         return 1 - (np.dot(ang1, ang2) / np.linalg.norm(ang1) /
                     np.linalg.norm(ang2))
@@ -3426,6 +3437,7 @@ def calPatternAcc():
 
 
 def calPatternAcc8():
+
     def angleDist(ang1, ang2):
         return 1 - (np.dot(ang1, ang2) / np.linalg.norm(ang1) /
                     np.linalg.norm(ang2))
@@ -3498,6 +3510,80 @@ def calPatternAcc8():
     print(total, top_1, top_1 / total)
 
 
+def calPatternAcc6():
+
+    def angleDist(ang1, ang2):
+        return 1 - (np.dot(ang1, ang2) / np.linalg.norm(ang1) /
+                    np.linalg.norm(ang2))
+
+    top_1 = 0
+    total = 0
+    for dir in os.listdir(STUDY2_DIR):
+        if 'test' in dir or not os.path.isdir(os.path.join(STUDY2_DIR, dir)):
+            continue
+        for i, c in enumerate(LETTER):
+            for j in range(5):
+                path = np.load(
+                    os.path.join(STUDY2_DIR, dir, c + '_' + str(j) + '.npy'))
+                try:
+                    directions_index, redundant_6directions, weights = getNumberOfDirections(
+                        path, 6, None)
+                    path_directions = [
+                        np.array([
+                            np.cos(DIRECTIONS_MAP['6'][_]),
+                            np.sin(DIRECTIONS_MAP['6'][_])
+                        ]) for _ in redundant_6directions
+                    ]
+                except:
+                    print(c, j)
+                    continue
+                if (len(weights) <= 0):
+                    continue
+                candidates = []
+                for ch in LETTER:
+                    std_directions = [
+                        np.array([
+                            np.cos(DIRECTIONS_MAP['6'][i]),
+                            np.sin(DIRECTIONS_MAP['6'][i])
+                        ]) for i in DIRECTION_PATTERN6[ch]
+                    ]
+                    d, cost_matrix, acc_cost_matrix, warping_path = dtw(
+                        path_directions,
+                        std_directions,
+                        dist=angleDist,
+                        warp=3,
+                        s=0.5)
+                    adj_dist = 0
+                    path_warp = np.array(list(warping_path[0]),
+                                         dtype=np.uint16)
+                    std_warp = np.array(list(warping_path[1]), dtype=np.uint16)
+                    for path_i in range(len(path_warp)):
+                        adj_dist += weights[path_warp[path_i]] * angleDist(
+                            path_directions[path_warp[path_i]],
+                            std_directions[std_warp[path_i]])
+                    candidates.append(adj_dist)
+                sorted_index = np.argsort(candidates)
+                dist_min = candidates[sorted_index[0]]
+                dist_min_indexes = []
+                for s_i in sorted_index:
+                    if candidates[s_i] == dist_min:
+                        dist_min_indexes.append(s_i)
+                    elif candidates[s_i] > dist_min:
+                        break
+                total += 1
+                if i in dist_min_indexes:
+                    top_1 += 1
+                # print(path_directions)
+                # print(candidates)
+                # input()
+                if i not in dist_min_indexes:
+                    print(LETTER[i], j,
+                          [LETTER[dmi] for dmi in dist_min_indexes],
+                          redundant_6directions)
+                    plotOneLettersCorner8(path)
+    print(total, top_1, top_1 / total)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p',
@@ -3548,8 +3634,9 @@ if __name__ == '__main__':
     # gaussianDirectionsMultiple()
     # visualizeGaussianDirections()
     # calSingleAcc()
-    migrateSingleAndMultiple()
+    # migrateSingleAndMultiple()
     # pointsNumber()
+    calPatternAcc6()
 
     # for dir in os.listdir(BASE_DIR):
     #     if dir == "test" or not os.path.isdir(os.path.join(BASE_DIR, dir)):

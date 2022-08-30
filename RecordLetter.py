@@ -94,21 +94,19 @@ if __name__ == '__main__':
         '--index',
         default=-1,
         help='specify the index of directory where the record will be saved')
-
+    parser.add_argument(
+        '-n',
+        '--name',
+        default='test',
+        help='specify the name of participant, default as "test"')
     args = parser.parse_args()
 
-    if int(args.index) < 0:
-        idx = 0
-        while True:
-            save_dir = "new_data/ch_data_" + 'letter' + '_dir_' + str(idx)
-
-            if not os.path.exists(save_dir):
-                os.mkdir(save_dir)
-                break
-            idx += 1
+    if args.name == 'test':
+        save_dir = "study2/test"
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
     else:
-        save_dir = "new_data/ch_data_" + 'letter' + '_dir_' + args.index
-
+        save_dir = "study2/%s" % args.name
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
 
