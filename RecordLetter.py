@@ -122,10 +122,12 @@ if __name__ == '__main__':
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.bind(('localhost', 34827))
 
-        candidates = list(
-            itertools.product([chr(y) for y in range(97, 123)],
-                              list(range(5))))
-        random.shuffle(candidates)
+        candidates = []
+        for rpt in range(5):
+            s_candidates = list(
+                itertools.product([chr(y) for y in range(97, 123)], [rpt]))
+            random.shuffle(s_candidates)
+            candidates.extend(s_candidates)
         candidate_index = 0
         current_record_num = candidates[candidate_index][1]
         while True:
