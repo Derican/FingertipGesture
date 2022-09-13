@@ -1,6 +1,7 @@
 import logging
 from itertools import product
 from math import atan2, sqrt
+from multiprocessing import Pool
 import numpy as np
 import argparse
 import os
@@ -768,7 +769,7 @@ def get8Directions(path):
     return directions_index, np.array(directions), directions_weights
 
 
-def getNumberOfDirections(path, num_d, person):
+def getNumberOfDirections(path, num_d, person, debug=False):
     """
     description
     ---------
@@ -799,7 +800,7 @@ def getNumberOfDirections(path, num_d, person):
         singleDCList.append(
             getSingleDirectionConfidenceList((x[v] - x[u], y[v] - y[u]), num_d,
                                              person, False))
-    if args.debug:
+    if debug:
         print(simplified_dir)
     PROBABILITY_THRESHOLD = 0.1
     # TODO: Return a confidence list
@@ -3575,8 +3576,12 @@ def getDirections6(path, debug=False):
             j = k
         if j - i >= NUMBER_OF_POINTS_THRES and np.sqrt(
             (x[j] - x[i])**2 + (y[j] - y[i])**2) > LENGTH_THRES:
-            collected.append(current_direction)
-            collected_corners.append((i, j))
+            if (len(collected) > 0 and collected[-1] == current_direction):
+                last_i, last_j = collected_corners[-1]
+                collected_corners[-1] = (last_i, j)
+            else:
+                collected.append(current_direction)
+                collected_corners.append((i, j))
         i = j
 
     if debug:
@@ -3605,6 +3610,8 @@ def getDirections6(path, debug=False):
                              y[collected_corners[1][1]])**2))
             collected.pop(0)
             collected_corners.pop(0)
+
+    if (len(collected_corners) >= 2):
         if (np.sqrt(
             (x[collected_corners[-1][0]] - x[collected_corners[-1][1]])**2 +
             (y[collected_corners[-1][0]] - y[collected_corners[-1][1]])**2
@@ -3629,202 +3636,110 @@ def getDirections6(path, debug=False):
     if debug:
         print("collected: ", collected, collected_corners)
 
-    # adj_directions = []
-
-    # i = 0
-    # while (i < len(collected_corners)):
-    #     if (i != len(collected_corners) - 1 and angleDist(
-    #             DIRECTIONS_MAP['6'][collected[i]],
-    #             DIRECTIONS_MAP['6'][collected[i + 1]])) > np.pi / 2:
-    #         adj_directions.append(collected[i])
-    #         if debug:
-    #             print("Not merging due to big angle diff: ", collected[i])
-    #         i += 1
-    #         continue
-    #     if (i == len(collected_corners) - 1):
-    #         adj_directions.append(collected[i])
-    #         if debug:
-    #             print("Not merging due to last angle: ", collected[i])
-    #         i += 1
-    #         continue
-    #     j = i
-    #     slope, intercept, r_value, p_value, std_err = stats.linregress(
-    #         x[collected_corners[i][0]:collected_corners[j][1]],
-    #         y[collected_corners[i][0]:collected_corners[j][1]])
-    #     while (True):
-    #         j += 1
-    #         if (j >= len(collected_corners)):
-    #             break
-    #         if (j < len(collected_corners) and angleDist(
-    #                 DIRECTIONS_MAP['6'][collected[j]],
-    #                 DIRECTIONS_MAP['6'][collected[j - 1]])) > np.pi / 2:
-    #             break
-    #         f_slope, f_intercept, f_r_value, f_p_value, f_std_err = stats.linregress(
-    #             x[collected_corners[i][0]:collected_corners[j][1]],
-    #             y[collected_corners[i][0]:collected_corners[j][1]])
-    #         # plt.scatter(x[collected_corners[i][0]:collected_corners[j][1]],
-    #         #             y[collected_corners[i][0]:collected_corners[j][1]])
-    #         # plt.show()
-    #         if (f_r_value < R_THRES):
-    #             break
-    #         slope = f_slope
-    #         if debug:
-    #             print("merging from ", i, " to ", j, " r-value: ", f_r_value)
-    #     if i == j - 1:
-    #         adj_directions.append(collected[i])
-    #         if debug:
-    #             print("Not merging due to small r-value: ", collected[i],
-    #                   " r-value: ", f_r_value)
-    #         i += 1
-    #         continue
-    #     if (y[collected_corners[i][0]] >= y[collected_corners[j - 1][1]]):
-    #         if (slope >= 0):
-    #             adj_directions.append(
-    #                 getSingleDirectionConfidenceList((-1, -slope), 6,
-    #                                                  None)[0][0])
-    #         else:
-    #             adj_directions.append(
-    #                 getSingleDirectionConfidenceList((1, slope), 6,
-    #                                                  None)[0][0])
-    #     else:
-    #         if (slope >= 0):
-    #             adj_directions.append(
-    #                 getSingleDirectionConfidenceList((1, slope), 6,
-    #                                                  None)[0][0])
-    #         else:
-    #             adj_directions.append(
-    #                 getSingleDirectionConfidenceList((-1, -slope), 6,
-    #                                                  None)[0][0])
-    #     if debug:
-    #         print("merging angle from ", i, " to ", j, ": ",
-    #               adj_directions[-1])
-    #     i = j
-
     return collected
 
 
-def calPatternAcc6():
+def calculate(person):
+
+    error_data_filenames = np.load(os.path.join(STUDY2_DIR, 'error.npy'))
+    too_long_data_filenames = np.load(os.path.join(STUDY2_DIR, 'too_long.npy'))
 
     def angleDist(ang1, ang2):
         return 1 - (np.dot(ang1, ang2) / np.linalg.norm(ang1) /
                     np.linalg.norm(ang2))
 
+    if 'test' in person or not os.path.isdir(os.path.join(STUDY2_DIR, person)):
+        return np.array([0, 0, 0])
+    if person != 'gyf':
+        return np.array([0, 0, 0])
+    total = 0
+    top_1_q = 0
+    overlap = 0
+    marked_overlap = []
+    for i, c in enumerate(LETTER):
+        for j in range(5):
+            path_name = os.path.join(STUDY2_DIR, person,
+                                     c + '_' + str(j) + '.npy')
+            if path_name in error_data_filenames or path_name in too_long_data_filenames:
+                continue
+            path = np.load(path_name)
+
+            x, y, dep = getAveragePath(path)
+            if (len(x) <= 0):
+                continue
+            x = gaussian_filter1d(x, sigma=8)
+            y = gaussian_filter1d(y, sigma=8)
+            ext_directions = [
+                getSingleDirectionConfidenceList(
+                    (x[_] - x[_ - 1], y[_] - y[_ - 1]), 6, None)[0][0]
+                for _ in range(1, len(x))
+            ]
+
+            candi_q = PriorityQueue()
+            path_directions = [
+                np.array([
+                    np.cos(DIRECTIONS_MAP['6'][_]),
+                    np.sin(DIRECTIONS_MAP['6'][_])
+                ]) for _ in getDirections6(path)
+            ]
+            if (len(path_directions) <= 0):
+                continue
+            if (abs(len(path_directions) - len(DIRECTION_PATTERN6[c])) >= 4):
+                overlap += 1
+                continue
+            total += 1
+            for ch in LETTER:
+                std_directions = [
+                    np.array([
+                        np.cos(DIRECTIONS_MAP['6'][i]),
+                        np.sin(DIRECTIONS_MAP['6'][i])
+                    ]) for i in DIRECTION_PATTERN6[ch]
+                ]
+                d, cost_matrix, acc_cost_matrix, warping_path = dtw(
+                    path_directions,
+                    std_directions,
+                    dist=angleDist,
+                    w=abs(len(path_directions) - len(std_directions)),
+                    s=2)
+                candi_q.put((d, ch))
+            if (candi_q.get()[1] == c):
+                top_1_q += 1
+            else:
+                print(LETTER[i], j)
+                print(ext_directions)
+                print(getDirections6(path, debug=True))
+                plt.axis('scaled')
+                plt.xlim(-10, 10)
+                plt.ylim(-10, 10)
+
+                for _ in range(0, len(x) - 1):
+                    plt.scatter([x[_ + 1]], [y[_ + 1]],
+                                c=COLORS[ext_directions[_]])
+
+                plt.pause(2)
+
+                mark = input()
+                if mark == 'y':
+                    marked_overlap.append(path_name)
+    np.save(os.path.join(STUDY2_DIR, person, 'overlap.npy'), marked_overlap)
+    return np.array([overlap, total, top_1_q])
+
+
+def calPatternAcc6():
+
     def getNormVec(x, y):
         return np.array([x, y]) / np.sqrt(x**2 + y**2)
 
-    top_1 = 0
-    top_1_q = 0
-    total = 0
-    for dir in os.listdir(STUDY2_DIR):
-        if 'test' in dir or not os.path.isdir(os.path.join(STUDY2_DIR, dir)):
-            continue
-        for i, c in enumerate(LETTER):
-            for j in range(5):
-                path = np.load(
-                    os.path.join(STUDY2_DIR, dir, c + '_' + str(j) + '.npy'))
-                # try:
-                #     directions_index, redundant_6directions, weights = getNumberOfDirections(
-                #         path, 6, None)
-                #     path_directions = [
-                #         np.array([
-                #             np.cos(DIRECTIONS_MAP['6'][_]),
-                #             np.sin(DIRECTIONS_MAP['6'][_])
-                #         ]) for _ in redundant_6directions
-                #     ]
-                # except:
-                #     print(c, j)
-                #     continue
-                # if (len(weights) <= 0):
-                #     continue
-                # candidates = []
-                # for ch in LETTER:
-                #     std_directions = [
-                #         np.array([
-                #             np.cos(DIRECTIONS_MAP['6'][i]),
-                #             np.sin(DIRECTIONS_MAP['6'][i])
-                #         ]) for i in DIRECTION_PATTERN6[ch]
-                #     ]
-                #     d, cost_matrix, acc_cost_matrix, warping_path = dtw(
-                #         path_directions,
-                #         std_directions,
-                #         dist=angleDist,
-                #         warp=3,
-                #         s=0.5)
-                #     adj_dist = 0
-                #     path_warp = np.array(list(warping_path[0]),
-                #                          dtype=np.uint16)
-                #     std_warp = np.array(list(warping_path[1]), dtype=np.uint16)
-                #     for path_i in range(len(path_warp)):
-                #         adj_dist += weights[path_warp[path_i]] * angleDist(
-                #             path_directions[path_warp[path_i]],
-                #             std_directions[std_warp[path_i]])
-                #     candidates.append(adj_dist)
-                # sorted_index = np.argsort(candidates)
-                # dist_min = candidates[sorted_index[0]]
-                # dist_min_indexes = []
-                # for s_i in sorted_index:
-                #     if candidates[s_i] == dist_min:
-                #         dist_min_indexes.append(s_i)
-                #     elif candidates[s_i] > dist_min:
-                #         break
-                total += 1
-                # if i in dist_min_indexes:
-                #     top_1 += 1
+    with Pool(6) as pool:
+        result = pool.map(calculate, os.listdir(STUDY2_DIR))
+        print(list(zip(os.listdir(STUDY2_DIR), result)))
+        print(np.sum(np.array(result), axis=0))
 
-                # if i not in dist_min_indexes:
-                #     print(LETTER[i], j,
-                #           [LETTER[dmi] for dmi in dist_min_indexes],
-                #           redundant_6directions)
-                # plotOneLettersCorner8(path)
 
-                x, y, d = getAveragePath(path)
-                x = gaussian_filter1d(x, sigma=8)
-                y = gaussian_filter1d(y, sigma=8)
-                ext_directions = [
-                    getSingleDirectionConfidenceList(
-                        (x[_] - x[_ - 1], y[_] - y[_ - 1]), 6, None)[0][0]
-                    for _ in range(1, len(x))
-                ]
+def calPatternAcc6SingleProc():
 
-                candi_q = PriorityQueue()
-                path_directions = [
-                    np.array([
-                        np.cos(DIRECTIONS_MAP['6'][_]),
-                        np.sin(DIRECTIONS_MAP['6'][_])
-                    ]) for _ in getDirections6(path)
-                ]
-                for ch in LETTER:
-                    std_directions = [
-                        np.array([
-                            np.cos(DIRECTIONS_MAP['6'][i]),
-                            np.sin(DIRECTIONS_MAP['6'][i])
-                        ]) for i in DIRECTION_PATTERN6[ch]
-                    ]
-                    d, cost_matrix, acc_cost_matrix, warping_path = dtw(
-                        path_directions,
-                        std_directions,
-                        dist=angleDist,
-                        w=abs(len(path_directions) - len(std_directions)),
-                        s=2)
-                    candi_q.put((d, ch))
-                # print(candi_q.get())
-                if (candi_q.get()[1] == c):
-                    top_1_q += 1
-                else:
-                    print(LETTER[i], j)
-                    print(ext_directions)
-                    print(getDirections6(path, debug=True))
-                    plt.axis('scaled')
-                    plt.xlim(-10, 10)
-                    plt.ylim(-10, 10)
-
-                    for _ in range(0, len(x) - 1):
-                        plt.scatter([x[_ + 1]], [y[_ + 1]],
-                                    c=COLORS[ext_directions[_]])
-
-                    plt.show()
-
-    print(total, top_1_q, top_1_q / total)
+    for person in os.listdir(STUDY2_DIR):
+        calculate(person)
 
 
 if __name__ == '__main__':
@@ -3879,7 +3794,7 @@ if __name__ == '__main__':
     # calSingleAcc()
     # migrateSingleAndMultiple()
     # pointsNumber()
-    calPatternAcc6()
+    calPatternAcc6SingleProc()()
 
     # for dir in os.listdir(BASE_DIR):
     #     if dir == "test" or not os.path.isdir(os.path.join(BASE_DIR, dir)):
