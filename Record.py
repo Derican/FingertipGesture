@@ -50,6 +50,7 @@ frame_operator = lambda x: None
 
 
 class RealtimePlot(pg.GraphicsLayoutWidget):
+
     def __init__(self, parent=None):
         super().__init__(parent=parent)
 
@@ -80,6 +81,7 @@ class RealtimePlot(pg.GraphicsLayoutWidget):
 
 
 class FeedbackRecordWindow(QWidget):
+
     def __init__(self, parent=None):
         super(FeedbackRecordWindow, self).__init__(parent)
         self.setWindowTitle("FeedbackRecordWindow")
@@ -246,6 +248,12 @@ def plot_frame():
     sum_frame = np.zeros((HEIGHT, WIDTH))
 
 
+def plot_avg_frame():
+    global frame_series
+    from Plot import plotOneLettersCorner8
+    plotOneLettersCorner8(frame_series)
+
+
 def plot_each_frame():
     plt.clf()
     plt.imshow(frame_each, cmap=plt.cm.hot, vmin=0, vmax=100)
@@ -298,6 +306,10 @@ def feedback_record():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument("-a",
+                        "--average",
+                        action="store_true",
+                        help="print sum of average points of each frame")
     parser.add_argument("-b",
                         "--bound",
                         action="store_true",
@@ -328,7 +340,9 @@ if __name__ == '__main__':
                         help="print sum of each frames")
 
     args = parser.parse_args()
-    if args.bound:
+    if args.average:
+        frame_operator = save_frame
+    elif args.bound:
         frame_operator = print_bound_frame
     elif args.feedback:
         frame_operator = save_frame
@@ -437,6 +451,8 @@ if __name__ == '__main__':
                             frame_series)
                     elif args.sum:
                         plot_frame()
+                    elif args.average:
+                        plot_avg_frame()
                     if code == 'q':
                         interrupted = True
                         break

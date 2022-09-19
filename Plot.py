@@ -30,8 +30,8 @@ STUDY1_DIR = 'study1'
 STUDY2_DIR = 'study2'
 
 valid_study2_data = [
-    'cly', 'djy', 'fjl', 'gyf', 'jyw', 'ljy', 'lly', 'lm', 'mhb', 'stp', 'wsw',
-    'ykh', 'ytj', 'yxy', 'yyq', 'zxw', 'zyw'
+    'cly', 'djy', 'gyf', 'jyw', 'lly', 'lm', 'stp', 'wsw', 'ytj', 'yxy', 'zxw',
+    'zyw'
 ]
 
 LETTER = [chr(y) for y in range(97, 123)]
