@@ -118,5 +118,64 @@ def calOffset():
         json.dump(offset_dict, out)
 
 
+CONFUSION_MATRIX = [[0, 1, 5, 5, 5, 1], [1, 0, 2, 5, 5, 5], [5, 2, 0, 1, 5, 5],
+                    [5, 5, 1, 0, 1, 5], [5, 5, 5, 1, 0, 2], [1, 5, 5, 5, 2, 0]]
+
+
+def angleDist(ang1, ang2):
+    return CONFUSION_MATRIX[ang1][ang2]
+
+
+def calOverlap():
+
+    error_data_filenames = np.load(os.path.join(STUDY2_DIR, 'error.npy'))
+    too_long_data_filenames = np.load(os.path.join(STUDY2_DIR, 'too_long.npy'))
+
+    overlap_data = []
+    for dir in os.listdir(STUDY2_DIR):
+        if dir == 'test' or not os.path.isdir(os.path.join(STUDY2_DIR, dir)):
+            continue
+
+        for t_l_i, t_l in enumerate(LETTER):
+            for rep in range(5):
+                try:
+                    path_name = os.path.join(STUDY2_DIR, dir,
+                                             "%s_%d.npy" % (t_l, rep))
+                    path = np.load(path_name)
+
+                    path_directions = getDirections6(path, dir)
+                    std_directions = [i for i in DIRECTION_PATTERN6[t_l]]
+                    paths = dtaidistance.dtw.warping_path(
+                        path_directions, std_directions)
+
+                    overlap = False
+                    idx = 0
+                    while idx < len(paths):
+                        match_list = []
+                        current_std_idx = paths[idx][1]
+                        while idx < len(
+                                paths) and paths[idx][1] == current_std_idx:
+                            match_list.append(paths[idx][0])
+                            idx += 1
+                        min_dis = np.min([
+                            angleDist(path_directions[m_l],
+                                      std_directions[current_std_idx])
+                            for m_l in match_list
+                        ])
+                        if min_dis > 2:
+                            overlap = True
+                            break
+
+                    if overlap:
+                        overlap_data.append(path_name)
+                        # plotDirections6(path, dir, t_l_i, rep)
+
+                except Exception as e:
+                    print(str(e))
+
+    print(len(overlap_data))
+    np.save("study2/overlap.npy", np.array(overlap_data))
+
+
 if __name__ == "__main__":
-    calOffset()
+    calOverlap()
