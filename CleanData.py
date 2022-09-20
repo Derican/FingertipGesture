@@ -126,6 +126,30 @@ def angleDist(ang1, ang2):
     return CONFUSION_MATRIX[ang1][ang2]
 
 
+def checkOverlap(path, person, target_ch):
+    path_directions = getDirections6(path, person)
+    std_directions = [i for i in DIRECTION_PATTERN6[target_ch]]
+    paths = dtaidistance.dtw.warping_path(path_directions, std_directions)
+
+    overlap = False
+    idx = 0
+    while idx < len(paths):
+        match_list = []
+        current_std_idx = paths[idx][1]
+        while idx < len(paths) and paths[idx][1] == current_std_idx:
+            match_list.append(paths[idx][0])
+            idx += 1
+        min_dis = np.min([
+            angleDist(path_directions[m_l], std_directions[current_std_idx])
+            for m_l in match_list
+        ])
+        if min_dis > 2:
+            overlap = True
+            break
+
+    return overlap
+
+
 def calOverlap():
 
     error_data_filenames = np.load(os.path.join(STUDY2_DIR, 'error.npy'))
