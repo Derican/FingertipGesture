@@ -13,7 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 from queue import Queue
-from Plot import getConfidenceQueue, plotOneLettersCorner, getConfidenceQueue8, predictLetter
+from Plot import LETTER, getConfidenceQueue, plotDirections6, plotOneLettersCorner, getConfidenceQueue8, predictLetter
 
 candidates = [chr(y) for y in range(97, 123)]
 
@@ -53,14 +53,12 @@ def init_frame():
 
 
 def scan_frames(frame, info: sensel.SenselSensorInfo):
-    global recording
     while not interrupted:
         error = sensel.readSensor(handle)
         error, num_frames = sensel.getNumAvailableFrames(handle)
         for i in range(num_frames):
             error = sensel.getFrame(handle, frame)
-            if recording:
-                save_frame(frame, info)
+            save_frame(frame, info)
 
 
 def save_frame(frame, info: sensel.SenselSensorInfo):
@@ -86,7 +84,7 @@ SENTENCES = [
     'elections bring out the best'
 ]
 PRESSURE_THRESHOLD = 10
-FRAME_WINDOW = 80
+FRAME_WINDOW = 10
 BLOCK_NUM = 5
 
 if __name__ == '__main__':
@@ -147,22 +145,20 @@ if __name__ == '__main__':
                         current_letter_id += 1
                         send(json.dumps({"CA": ' '}))
                         continue
-                    while not frame_series.empty():
-                        frame_series.get()
-                    recording = True
                     while np.sum(frame_series.get()) <= PRESSURE_THRESHOLD:
                         pass
                     frames = []
                     while np.sum(
                             fs := frame_series.get()) > PRESSURE_THRESHOLD:
                         frames.append(fs)
-                    recording = False
                     if len(frames) < FRAME_WINDOW:
                         continue
                     c = predictLetter(frames)
                     send(json.dumps({"CA": c}))
                     if c == current_letter:
                         top_1 += 1
+                    else:
+                        plotDirections6(frames, None, LETTER.index(c), 0)
                     current_letter_id += 1
                     total += 1
                 elapsed += time.time() - start
@@ -178,8 +174,8 @@ if __name__ == '__main__':
                 }))
             print("total: %d" % total)
             print("acc: %f" % (top_1 / total))
-            print("wpm: %f" % (31 / (elapsed / 60)))
-            time.sleep(60)
+            print("wpm: %f" % (total / (elapsed / 60)))
+            input()
             block_id += 1
             current_letter_id = 0
             current_sentence_id = 0

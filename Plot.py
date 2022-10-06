@@ -31,7 +31,7 @@ STUDY2_DIR = 'study2'
 
 valid_study2_data = [
     'cly', 'djy', 'gyf', 'jyw', 'lly', 'lm', 'stp', 'wsw', 'ytj', 'yxy', 'zxw',
-    'zyw'
+    'zyw', 'jjx', 'hz', 'lyj', 'xrh'
 ]
 
 LETTER = [chr(y) for y in range(97, 123)]
@@ -713,8 +713,9 @@ def getSingleDirectionConfidenceList(v, num_d, person, mix=False):
     if person is not None:
         with open("offset.json", "r") as offset_f:
             offset_dict = json.load(offset_f)
-            for (key, value) in gauss_dict.items():
-                gauss_dict[key][1] -= offset_dict[person]
+            if person in offset_dict:
+                for (key, value) in gauss_dict.items():
+                    gauss_dict[key][1] -= offset_dict[person]
 
     ang = np.arctan2(v[1], v[0])
     confidence_list = []
@@ -3818,6 +3819,36 @@ def plotDirections6(path, person, i, j):
     plt.show()
 
 
+def predictLetter(path):
+
+    def angleDist(ang1, ang2):
+        # return 1 - (np.dot(ang1, ang2) / np.linalg.norm(ang1) /
+        #             np.linalg.norm(ang2))
+        return CONFUSION_MATRIX[ang1][ang2]
+
+    x, y, dep = getAveragePath(path)
+    if (len(x) <= 0):
+        return 'l'
+    x = gaussian_filter1d(x, sigma=8)
+    y = gaussian_filter1d(y, sigma=8)
+
+    candi_q = []
+    path_directions = getDirections6(path, None)
+    if (len(path_directions) <= 0):
+        return 'l'
+    for ch in LETTER:
+        std_directions = DIRECTION_PATTERN6[ch]
+        d, cost_matrix, acc_cost_matrix, warping_path = dtw(
+            path_directions,
+            std_directions,
+            dist=angleDist,
+            w=abs(len(path_directions) - len(std_directions)),
+            s=2)
+        candi_q.append((d, ch))
+    candi_q.sort()
+    return candi_q[0][1]
+
+
 def calculate(person):
 
     error_data_filenames = np.load(os.path.join(STUDY2_DIR, 'error.npy'))
@@ -3837,8 +3868,11 @@ def calculate(person):
     overlap = 0
     for i, c in enumerate(LETTER):
         for j in range(5):
-            path_name = os.path.join(STUDY2_DIR, person,
+            path_name = os.path.join(STUDY2_DIR, person + '1',
                                      c + '_' + str(j) + '.npy')
+            if not os.path.exists(path_name):
+                path_name = os.path.join(STUDY2_DIR, person,
+                                         c + '_' + str(j) + '.npy')
             if path_name in zero_data_filenames or path_name in overlap_data_filenames:
                 continue
             path = np.load(path_name)
@@ -3846,6 +3880,7 @@ def calculate(person):
             x, y, dep = getAveragePath(path)
             if (len(x) <= 0):
                 overlap += 1
+                print(path_name)
                 continue
             x = gaussian_filter1d(x, sigma=8)
             y = gaussian_filter1d(y, sigma=8)
@@ -3854,9 +3889,11 @@ def calculate(person):
             path_directions = getDirections6(path, person)
             if (len(path_directions) <= 0):
                 overlap += 1
+                print(path_name)
                 continue
             if (abs(len(path_directions) - len(DIRECTION_PATTERN6[c])) >= 3):
                 overlap += 1
+                print(path_name)
                 continue
             total += 1
             for ch in LETTER:
@@ -3914,15 +3951,15 @@ def calculate(person):
 
                 n_x, n_y, n_d = getAveragePath(path, truncate=False)
 
-                ims = []
-                fig = plt.figure()
-                plt.scatter(n_x, n_y, c='grey')
-                for _ in range(0, len(x) - 1):
-                    im = plt.scatter([x[_ + 1]], [y[_ + 1]],
-                                     c=COLORS[ext_directions[_]]).findobj()
-                    ims.append(im)
-                ani = ArtistAnimation(fig, ims, interval=3)
-                ani.save(path_name.replace("npy", "gif"), writer='pillow')
+                # ims = []
+                # fig = plt.figure()
+                # plt.scatter(n_x, n_y, c='grey')
+                # for _ in range(0, len(x) - 1):
+                #     im = plt.scatter([x[_ + 1]], [y[_ + 1]],
+                #                      c=COLORS[ext_directions[_]]).findobj()
+                #     ims.append(im)
+                # ani = ArtistAnimation(fig, ims, interval=3)
+                # ani.save(path_name.replace("npy", "gif"), writer='pillow')
 
                 # plt.axis('scaled')
                 # plt.xlim(-10, 10)

@@ -69,13 +69,26 @@ def cleanAll():
 
 
 def cleanAll2():
-    for dir in os.listdir(STUDY2_DIR):
+    for dir in valid_study2_data:
         if 'test' in dir or not os.path.isdir(os.path.join(STUDY2_DIR, dir)):
             continue
         for i, c in enumerate(LETTER):
             for j in range(5):
                 filename = os.path.join(STUDY2_DIR, dir,
                                         c + '_' + str(j) + '.npy')
+                path = np.load(filename)
+                check_path_val = checkPath(path)
+                if check_path_val == "zero":
+                    zero_data.append(filename)
+                elif check_path_val == "error":
+                    error_data.append(filename)
+                elif check_path_val == "too_long":
+                    too_long_data.append(filename)
+
+                filename = os.path.join(STUDY2_DIR, dir + '1',
+                                        c + '_' + str(j) + '.npy')
+                if not os.path.exists(filename):
+                    continue
                 path = np.load(filename)
                 check_path_val = checkPath(path)
                 if check_path_val == "zero":
@@ -156,7 +169,7 @@ def calOverlap():
     too_long_data_filenames = np.load(os.path.join(STUDY2_DIR, 'too_long.npy'))
 
     overlap_data = []
-    for dir in os.listdir(STUDY2_DIR):
+    for dir in valid_study2_data:
         if dir == 'test' or not os.path.isdir(os.path.join(STUDY2_DIR, dir)):
             continue
 
@@ -193,6 +206,38 @@ def calOverlap():
                     if overlap:
                         overlap_data.append(path_name)
                         # plotDirections6(path, dir, t_l_i, rep)
+
+                    path_name = os.path.join(STUDY2_DIR, dir + '1',
+                                             "%s_%d.npy" % (t_l, rep))
+                    if not os.path.exists(path_name):
+                        continue
+                    path = np.load(path_name)
+
+                    path_directions = getDirections6(path, dir)
+                    std_directions = [i for i in DIRECTION_PATTERN6[t_l]]
+                    paths = dtaidistance.dtw.warping_path(
+                        path_directions, std_directions)
+
+                    overlap = False
+                    idx = 0
+                    while idx < len(paths):
+                        match_list = []
+                        current_std_idx = paths[idx][1]
+                        while idx < len(
+                                paths) and paths[idx][1] == current_std_idx:
+                            match_list.append(paths[idx][0])
+                            idx += 1
+                        min_dis = np.min([
+                            angleDist(path_directions[m_l],
+                                      std_directions[current_std_idx])
+                            for m_l in match_list
+                        ])
+                        if min_dis > 2:
+                            overlap = True
+                            break
+
+                    if overlap:
+                        overlap_data.append(path_name)
 
                 except Exception as e:
                     print(str(e))
