@@ -1,4 +1,4 @@
-import json
+import json, os
 import random
 import socket
 import string
@@ -6,6 +6,8 @@ import threading
 import sys
 import time
 import traceback
+
+from utils import saveFramesAsPath
 
 sys.path.append('sensel-lib-wrappers/sensel-lib-python')
 import sensel
@@ -80,19 +82,43 @@ def close_sensel(frame):
     error = sensel.close(handle)
 
 
-SENTENCES = [
+PANGRAM_SENTENCES = [
     'waltz bad nymph for quick jigs vex', 'quick zephyrs blow vexing daft jim',
-    'sphinx of black quartz judge my vow', 'my watch fell in the water',
-    'elections bring out the best'
+    'sphinx of black quartz judge my vow'
+]
+MACKENZIE_SENTENCES = [
+    'breathing is difficult', 'my favorite subject is psychology',
+    'circumstances are unacceptable', 'world population is growing',
+    'earth quakes are predictable', 'correct your diction immediately',
+    'express delivery is very fast', 'the minimum amount of time',
+    'luckily my wallet was found', 'apartments are too expensive'
 ]
 PRESSURE_THRESHOLD = 10
 FRAME_WINDOW = 80
-BLOCK_NUM = 5
+BLOCK_NUM = 1
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        '-n',
+        '--name',
+        default='test',
+        help='specify the name of participant, default as "test"')
 
     args = parser.parse_args()
+
+    if args.name == 'test':
+        save_dir = "study3/test"
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
+            for i in range(BLOCK_NUM):
+                os.mkdir(save_dir + '/%d' % i)
+    else:
+        save_dir = "study3/%s" % args.name
+        if not os.path.exists(save_dir):
+            os.mkdir(save_dir)
+            for i in range(BLOCK_NUM):
+                os.mkdir(save_dir + '/%d' % i)
 
     handle = open_sensel()
     if handle:
@@ -109,13 +135,19 @@ if __name__ == '__main__':
         def send(str: str):
             s.sendto(str.encode('gbk'), ('localhost', 34826))
 
-        sentences = SENTENCES.copy()
-        random.shuffle(sentences)
         block_id = 0
-        current_sentence_id = 0
-        current_letter_id = 0
+        results = {}
 
         while block_id < BLOCK_NUM:
+            current_letter_id = 0
+            current_sentence_id = 0
+            sentences = random.sample(PANGRAM_SENTENCES, 2) + random.sample(
+                MACKENZIE_SENTENCES, 3)
+            random.shuffle(sentences)
+            words_count = 0
+            for sentence in sentences:
+                words_count += len(sentence.split(' '))
+
             total = 0
             top_1 = 0
             elapsed = 0
@@ -128,6 +160,7 @@ if __name__ == '__main__':
                     "CR": ""
                 }))
             input()
+            starts_and_ends = []
             while current_sentence_id < len(sentences):
                 current_sentence = sentences[current_sentence_id]
                 send(
@@ -160,12 +193,19 @@ if __name__ == '__main__':
                     if len(frames) < FRAME_WINDOW:
                         continue
                     c = predictLetter(frames)
+                    if c is None:
+                        continue
+                    saveFramesAsPath(
+                        frames, save_dir + '/%d/%f_%c.npy' %
+                        (block_id, time.time(), current_letter))
                     send(json.dumps({"CA": c}))
                     if c == current_letter:
                         top_1 += 1
                     current_letter_id += 1
                     total += 1
-                elapsed += time.time() - start
+                end = time.time()
+                starts_and_ends.append({'start': start, 'end': end})
+                elapsed += end - start
                 print("End:   ", time.time())
                 current_sentence_id += 1
                 current_letter_id = 0
@@ -178,10 +218,26 @@ if __name__ == '__main__':
                 }))
             print("total: %d" % total)
             print("acc: %f" % (top_1 / total))
-            print("wpm: %f" % (31 / (elapsed / 60)))
+            print("wpm: %f" % (words_count / (elapsed / 60)))
+            results[block_id] = {
+                'block_id': block_id,
+                'sentences': sentences,
+                'words_count': words_count,
+                'total_letters': total,
+                'accurate_letters': top_1,
+                'accuracy': (top_1 / total),
+                'starts_and_ends': starts_and_ends,
+                'wpm': (words_count / (elapsed / 60))
+            }
             time.sleep(60)
             block_id += 1
-            current_letter_id = 0
-            current_sentence_id = 0
-
+        with open('study3/%s/meta.json' % args.name, 'w') as f:
+            json.dump(results, f)
+        send(
+            json.dumps({
+                'BR': "NaN",
+                'IR': "You have completed all the blocks. Thank you!",
+                'TR': "",
+                "CR": ""
+            }))
         close_sensel(frame)

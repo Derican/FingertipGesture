@@ -3678,8 +3678,8 @@ def getDirections6(path, person, debug=False):
                                             ang2) >= np.pi else abs(ang1 -
                                                                     ang2)
 
-    NUMBER_OF_POINTS_THRES = 15
-    LENGTH_THRES = 1.5
+    NUMBER_OF_POINTS_THRES = [16, 9, 9, 16, 9, 9]
+    LENGTH_THRES = [1.6, 1, 1, 1.6, 1, 1]
     R_THRES = 0.89
     R_SQUARED_THRES = 0.9
     ANGLE_THRESHOLD = np.pi / 4
@@ -3724,8 +3724,9 @@ def getDirections6(path, person, debug=False):
                 print("merge from ", i, " to ", k, " angle diff = ",
                       angle_diff)
             j = k
-        if j - i >= NUMBER_OF_POINTS_THRES and np.sqrt(
-            (x[j] - x[i])**2 + (y[j] - y[i])**2) > LENGTH_THRES:
+        if j - i >= NUMBER_OF_POINTS_THRES[current_direction] and np.sqrt(
+            (x[j] - x[i])**2 +
+            (y[j] - y[i])**2) > LENGTH_THRES[current_direction]:
             if (len(collected) > 0 and collected[-1] == current_direction):
                 last_i, last_j = collected_corners[-1]
                 collected_corners[-1] = (last_i, j)

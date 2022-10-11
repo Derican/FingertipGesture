@@ -53,12 +53,14 @@ def init_frame():
 
 
 def scan_frames(frame, info: sensel.SenselSensorInfo):
+    global recording
     while not interrupted:
         error = sensel.readSensor(handle)
         error, num_frames = sensel.getNumAvailableFrames(handle)
         for i in range(num_frames):
             error = sensel.getFrame(handle, frame)
-            save_frame(frame, info)
+            if recording:
+                save_frame(frame, info)
 
 
 def save_frame(frame, info: sensel.SenselSensorInfo):
@@ -145,12 +147,16 @@ if __name__ == '__main__':
                         current_letter_id += 1
                         send(json.dumps({"CA": ' '}))
                         continue
+                    while not frame_series.empty():
+                        frame_series.get()
+                    recording = True
                     while np.sum(frame_series.get()) <= PRESSURE_THRESHOLD:
                         pass
                     frames = []
                     while np.sum(
                             fs := frame_series.get()) > PRESSURE_THRESHOLD:
                         frames.append(fs)
+                    recording = False
                     if len(frames) < FRAME_WINDOW:
                         continue
                     c = predictLetter(frames)
