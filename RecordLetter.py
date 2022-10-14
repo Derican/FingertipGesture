@@ -62,12 +62,14 @@ def init_frame():
 
 
 def scan_frames(frame, info: sensel.SenselSensorInfo):
+    global recording
     while not interrupted:
         error = sensel.readSensor(handle)
         error, num_frames = sensel.getNumAvailableFrames(handle)
         for i in range(num_frames):
             error = sensel.getFrame(handle, frame)
-            save_frame(frame, info)
+            if recording:
+                save_frame(frame, info)
 
 
 def save_frame(frame, info: sensel.SenselSensorInfo):

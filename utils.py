@@ -211,7 +211,6 @@ def angleDistMatrix(ang1, ang2):
 
 
 class PersonalGaussianDist:
-
     def __init__(self, person) -> None:
         offset_dict = json.load(open('offset.json', 'r'))
         if person in offset_dict:
@@ -462,8 +461,8 @@ def predict(path, person, target, debug=False):
         if debug:
             print(target, candi_q[:min(5, len(candi_q))])
             plt.axis('scaled')
-            plt.xlim(-10, 10)
-            plt.ylim(-10, 10)
+            plt.xlim(10, 20)
+            plt.ylim(15, 25)
 
             plt.scatter(raw_x, raw_y, c='grey')
 

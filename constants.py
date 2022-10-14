@@ -28,6 +28,7 @@ from matplotlib.animation import ArtistAnimation
 STUDY1_DIR = 'study1'
 STUDY2_DIR = 'study2'
 STUDY2_DIR_ALTER = 'study2-alter'
+STUDY3_DIR = 'study3'
 
 valid_study2_data = [
     'cly', 'djy', 'gyf', 'jyw', 'lly', 'lm', 'stp', 'wsw', 'ytj', 'yxy', 'zxw',

@@ -63,12 +63,14 @@ def init_frame():
 
 
 def scan_frames(frame, info: sensel.SenselSensorInfo):
+    global recording
     while not interrupted:
         error = sensel.readSensor(handle)
         error, num_frames = sensel.getNumAvailableFrames(handle)
         for i in range(num_frames):
             error = sensel.getFrame(handle, frame)
-            save_frame(frame, info)
+            if recording:
+                save_frame(frame, info)
 
 
 def save_frame(frame, info: sensel.SenselSensorInfo):
@@ -159,7 +161,8 @@ if __name__ == '__main__':
                 target = candidates[candidate_index][0]
                 s.sendto(repr(target).encode('gbk'), ('localhost', 34826))
 
-                code = input('Press Enter to start record')
+                code = input('( %d / %d ) Press Enter to start record' %
+                             (candidate_index, len(candidates)))
                 if (code == 'q'):
                     interrupted = True
                     break

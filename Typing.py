@@ -95,7 +95,7 @@ MACKENZIE_SENTENCES = [
 ]
 PRESSURE_THRESHOLD = 10
 FRAME_WINDOW = 80
-BLOCK_NUM = 1
+BLOCK_NUM = 6
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -142,7 +142,7 @@ if __name__ == '__main__':
             current_letter_id = 0
             current_sentence_id = 0
             sentences = random.sample(PANGRAM_SENTENCES, 2) + random.sample(
-                MACKENZIE_SENTENCES, 3)
+                MACKENZIE_SENTENCES, 2)
             random.shuffle(sentences)
             words_count = 0
             for sentence in sentences:

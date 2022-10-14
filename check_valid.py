@@ -48,7 +48,7 @@ if __name__ == "__main__":
                         help='specify the person you want to look into')
     args = parser.parse_args()
 
-    TARGET_DIR = 'study2/' + args.person + '1'
+    TARGET_DIR = 'study2/' + args.person
 
     total = 0
     valid = 0

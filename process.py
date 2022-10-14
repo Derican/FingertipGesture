@@ -4,7 +4,6 @@ from worker import Worker
 
 
 class IdentifyStartAndEnd(Worker):
-
     def __init__(self) -> None:
         super().__init__(valid_study2_data)
         self.zero_data_filenames = np.load(os.path.join(
@@ -250,7 +249,6 @@ def identifyStartAndEnd():
 
 
 class CalculateAccuracy(Worker):
-
     def __init__(self, target_set) -> None:
         super().__init__(target_set)
         self.zero_data_filenames = np.load(os.path.join(
@@ -294,7 +292,6 @@ def calculateAccuracy():
 
 
 class CalibrateData(Worker):
-
     def __init__(self, target_set) -> None:
         super().__init__(target_set)
         self.offset_dict = json.load(open('offset.json', 'r'))
@@ -353,7 +350,18 @@ def calibrateData():
     worker.run()
 
 
+def lookIntoData():
+    person = 'ysq'
+
+    for filename in os.listdir(os.path.join(STUDY3_DIR, person, '5')):
+        target_ch = filename[-5]
+
+        path = np.load(os.path.join(STUDY3_DIR, person, '5', filename))
+        predict(path, None, target_ch, debug=True)
+
+
 if __name__ == '__main__':
     # identifyStartAndEnd()
     # calibrateData()
-    calculateAccuracy()
+    # calculateAccuracy()
+    lookIntoData()
