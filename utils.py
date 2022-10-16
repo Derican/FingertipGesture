@@ -211,6 +211,7 @@ def angleDistMatrix(ang1, ang2):
 
 
 class PersonalGaussianDist:
+
     def __init__(self, person) -> None:
         offset_dict = json.load(open('offset.json', 'r'))
         if person in offset_dict:
@@ -219,7 +220,7 @@ class PersonalGaussianDist:
             self.offset = 0
 
     def dist(self, u, v):
-        ang1 = np.arctan2(u[1], u[0]) - self.offset
+        ang1 = np.arctan2(u[1], u[0]) + self.offset
         ang2 = np.arctan2(v[1], v[0])
         val = np.exp(-((ang1 - ang2) / ang2)**2 / 2)
         val_adj_up = np.exp(-((ang1 - 2 * np.pi - ang2) / ang2)**2 / 2)

@@ -4,8 +4,9 @@ from worker import Worker
 
 
 class IdentifyStartAndEnd(Worker):
+
     def __init__(self) -> None:
-        super().__init__(valid_study2_data)
+        super().__init__(['cly'])
         self.zero_data_filenames = np.load(os.path.join(
             STUDY2_DIR, 'zero.npy'))
         self.overlap_data_filenames = np.load(
@@ -32,19 +33,21 @@ class IdentifyStartAndEnd(Worker):
                     continue
                 path = np.load(path_name)
 
-                x, y, d = getAveragePath(path, truncate=False, use_threshold=0)
-                x = gaussian_filter1d(x, sigma=8)
-                y = gaussian_filter1d(y, sigma=8)
-                d = gaussian_filter1d(d, sigma=4)
+                raw_x, raw_y, raw_d = getAveragePath(path,
+                                                     truncate=False,
+                                                     use_threshold=0)
+                x = gaussian_filter1d(raw_x, sigma=8)
+                y = gaussian_filter1d(raw_y, sigma=8)
+                d = gaussian_filter1d(raw_d, sigma=4)
                 if len(d) <= 1:
                     continue
                 delta_d = [abs(d[i] - d[i - 1]) for i in range(1, len(d))]
-                clamped_d = (delta_d - np.min(delta_d)) / (np.max(delta_d) -
-                                                           np.min(delta_d))
-                pressure_persistence_pairs = sorted(
-                    [t for t in RunPersistence(clamped_d) if t[1] > 0.05],
-                    key=lambda x: x[0])
-                trunc_at_end = pressure_persistence_pairs[-2][0]
+                # clamped_d = (delta_d - np.min(delta_d)) / (np.max(delta_d) -
+                #                                            np.min(delta_d))
+                # pressure_persistence_pairs = sorted(
+                #     [t for t in RunPersistence(clamped_d) if t[1] > 0.05],
+                #     key=lambda x: x[0])
+                # trunc_at_end = pressure_persistence_pairs[-2][0]
                 if len(x) <= 0:
                     continue
                 redundant_directions, directions_index = getDirections6(
@@ -138,13 +141,42 @@ class IdentifyStartAndEnd(Worker):
                 #     pressure_last.append(np.max(temp_pressure))
                 #     speed_last.append(np.max(temp_speed))
 
-                # fig, axes = plt.subplots(1, 5)
+                pressure_areas = []
+                pre_max = []
+                for frame in path:
+                    area = 0
+                    for y_coordinate in range(len(frame)):
+                        for x_coordinate in range(len(frame[y_coordinate])):
+                            if frame[y_coordinate][x_coordinate] > 0:
+                                area += 1
+                    if np.max(frame) > 0:
+                        pre_max.append(np.max(frame))
+                    if area > 0:
+                        pressure_areas.append(area)
 
-                # axes[0].set_xlim(-10, 10)
-                # axes[0].set_ylim(-10, 10)
-                # axes[1].set_ylim(-0.1, 1.5)
+                pre_max = gaussian_filter1d(pre_max, sigma=1)
+                pre_max = (pre_max - np.min(pre_max)) / (np.max(pre_max) -
+                                                         np.min(pre_max))
 
-                # axes[0].scatter(x, y, c='grey')
+                areas_persistence_pairs = sorted(
+                    [t for t in RunPersistence(pre_max) if t[1] > 0.01],
+                    key=lambda x: x[0])
+                trunc_at_end = areas_persistence_pairs[-3][0]
+
+                while pre_max[trunc_at_end] == 0:
+                    trunc_at_end -= 1
+
+                fig, axes = plt.subplots(1, 3)
+
+                axes[0].set_xlim(-10, 10)
+                axes[0].set_ylim(-10, 10)
+
+                axes[0].scatter(raw_x, raw_y, c='grey')
+                axes[0].scatter(raw_x[trunc_at_end:],
+                                raw_y[trunc_at_end:],
+                                c='blue')
+                # for s, t in identified_directions_index:
+                #     axes[0].scatter(x[s:t], y[s:t], c='green')
                 # axes[0].scatter(x[:valid_start], y[:valid_start], c='red')
                 # axes[0].scatter(x[valid_end:], y[valid_end:], c='blue')
 
@@ -172,15 +204,21 @@ class IdentifyStartAndEnd(Worker):
                 #         ],
                 #                         c='blue')
                 #         axes[3].scatter([i], [abs(d[i] - d[i - 1])], c='blue')
-                # for i in range(1, trunc_at_end):
-                #     axes[4].scatter([i], [abs(d[i] - d[i - 1])], c='grey')
-                # for i in range(trunc_at_end, len(d)):
-                #     axes[4].scatter([i], [abs(d[i] - d[i - 1])], c='green')
 
-                for id, (idx, pers) in enumerate(pressure_persistence_pairs):
-                    if idx >= valid_end:
-                        end_ppp.append(id - len(pressure_persistence_pairs))
-                # plt.show()
+                for i in range(1, valid_end):
+                    axes[1].scatter([i], [pre_max[i]], c='grey')
+                for i in range(valid_end, len(d)):
+                    axes[1].scatter([i], [pre_max[i]], c='green')
+
+                for i in range(1, trunc_at_end):
+                    axes[2].scatter([i], [pre_max[i]], c='grey')
+                for i in range(trunc_at_end, len(d)):
+                    axes[2].scatter([i], [pre_max[i]], c='blue')
+
+                # for id, (idx, pers) in enumerate(pressure_persistence_pairs):
+                #     if idx >= valid_end:
+                #         end_ppp.append(id - len(pressure_persistence_pairs))
+                plt.show()
 
         return pressure_start, pressure_first, pressure_last, pressure_end, speed_start, speed_first, speed_last, speed_end, end_ppp
 
@@ -188,7 +226,7 @@ class IdentifyStartAndEnd(Worker):
 def identifyStartAndEnd():
 
     worker = IdentifyStartAndEnd()
-    result = worker.run()
+    result = worker.runSingle()
     pressure_first = []
     pressure_start = []
     pressure_last = []
@@ -249,6 +287,7 @@ def identifyStartAndEnd():
 
 
 class CalculateAccuracy(Worker):
+
     def __init__(self, target_set) -> None:
         super().__init__(target_set)
         self.zero_data_filenames = np.load(os.path.join(
@@ -292,6 +331,7 @@ def calculateAccuracy():
 
 
 class CalibrateData(Worker):
+
     def __init__(self, target_set) -> None:
         super().__init__(target_set)
         self.offset_dict = json.load(open('offset.json', 'r'))
@@ -361,7 +401,7 @@ def lookIntoData():
 
 
 if __name__ == '__main__':
-    # identifyStartAndEnd()
+    identifyStartAndEnd()
     # calibrateData()
     # calculateAccuracy()
-    lookIntoData()
+    # lookIntoData()

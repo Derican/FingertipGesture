@@ -183,6 +183,7 @@ if __name__ == '__main__':
                     while not frame_series.empty():
                         frame_series.get()
                     recording = True
+                    inner_start = time.time()
                     while np.sum(frame_series.get()) <= PRESSURE_THRESHOLD:
                         pass
                     frames = []
@@ -190,22 +191,24 @@ if __name__ == '__main__':
                             fs := frame_series.get()) > PRESSURE_THRESHOLD:
                         frames.append(fs)
                     recording = False
+                    inner_end = time.time()
                     if len(frames) < FRAME_WINDOW:
                         continue
                     c = predictLetter(frames)
                     if c is None:
                         continue
                     saveFramesAsPath(
-                        frames, save_dir + '/%d/%f_%c.npy' %
-                        (block_id, time.time(), current_letter))
+                        frames, save_dir + '/%d/%f_%f_%c.npy' %
+                        (block_id, inner_start, inner_end, current_letter))
                     send(json.dumps({"CA": c}))
+                    elapsed += inner_end - inner_start
                     if c == current_letter:
                         top_1 += 1
                     current_letter_id += 1
                     total += 1
                 end = time.time()
                 starts_and_ends.append({'start': start, 'end': end})
-                elapsed += end - start
+
                 print("End:   ", time.time())
                 current_sentence_id += 1
                 current_letter_id = 0
@@ -218,7 +221,7 @@ if __name__ == '__main__':
                 }))
             print("total: %d" % total)
             print("acc: %f" % (top_1 / total))
-            print("wpm: %f" % (words_count / (elapsed / 60)))
+            print("wpm: %f" % ((total - 1) * 12 / elapsed))
             results[block_id] = {
                 'block_id': block_id,
                 'sentences': sentences,
@@ -227,7 +230,7 @@ if __name__ == '__main__':
                 'accurate_letters': top_1,
                 'accuracy': (top_1 / total),
                 'starts_and_ends': starts_and_ends,
-                'wpm': (words_count / (elapsed / 60))
+                'wpm': ((total - 1) * 12 / elapsed)
             }
             time.sleep(60)
             block_id += 1
