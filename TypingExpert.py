@@ -94,7 +94,7 @@ MACKENZIE_SENTENCES = [
 ]
 PRESSURE_THRESHOLD = 10
 FRAME_WINDOW = 80
-BLOCK_NUM = 6
+BLOCK_NUM = 12
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -113,7 +113,7 @@ if __name__ == '__main__':
             for i in range(BLOCK_NUM):
                 os.mkdir(save_dir + '/%d' % i)
     else:
-        save_dir = "study3/%s" % args.name
+        save_dir = "study3/%s_expert" % args.name
         if not os.path.exists(save_dir):
             os.mkdir(save_dir)
             for i in range(BLOCK_NUM):
@@ -136,13 +136,11 @@ if __name__ == '__main__':
 
         block_id = 0
         results = {}
+        sentences = random.sample(MACKENZIE_SENTENCES, 1)
 
         while block_id < BLOCK_NUM:
             current_letter_id = 0
             current_sentence_id = 0
-            sentences = random.sample(PANGRAM_SENTENCES, 2) + random.sample(
-                MACKENZIE_SENTENCES, 2)
-            random.shuffle(sentences)
             words_count = 0
             for sentence in sentences:
                 words_count += len(sentence.split(' '))
@@ -231,9 +229,9 @@ if __name__ == '__main__':
                 'starts_and_ends': starts_and_ends,
                 'wpm': ((total - 1) * 12 / elapsed)
             }
-            time.sleep(60)
+            time.sleep(1)
             block_id += 1
-        with open('study3/%s/meta.json' % args.name, 'w') as f:
+        with open('study3/%s_expert/meta.json' % args.name, 'w') as f:
             json.dump(results, f)
         send(
             json.dumps({
