@@ -211,6 +211,7 @@ def angleDistMatrix(ang1, ang2):
 
 
 class PersonalGaussianDist:
+
     def __init__(self, person) -> None:
         offset_dict = json.load(open('offset.json', 'r'))
         if person in offset_dict:
@@ -522,6 +523,157 @@ def predictAllInOne(path):
             points_x.append(x_average / sum_force)
             points_y.append(35 - y_average / sum_force)
             depths.append(sum_force)
+
+    if len(depths) <= 0:
+        return None
+
+    d = np.array(depths)
+    clamped_d = (d - np.min(d)) / (np.max(d) - np.min(d))
+    pressure_persistence_pairs = sorted(
+        [t for t in RunPersistence(clamped_d) if t[1] > 0.05],
+        key=lambda x: x[0])
+    if len(pressure_persistence_pairs) <= 2:
+        i = 1
+        while i < len(depths) and depths[i] > depths[i - 1]:
+            i += 1
+        first_extrema = depths[i]
+        while i >= 0 and depths[i] >= first_extrema * 0.3:
+            i -= 1
+        trunc_at_start = i
+        i = len(depths) - 1
+        while i > 1 and depths[i - 1] > depths[i]:
+            i -= 1
+        last_extrema = depths[i]
+        while i < len(depths) and depths[i] >= last_extrema * 0.7:
+            i += 1
+        trunc_at_end = i
+    elif len(pressure_persistence_pairs) == 3:
+        smallest_extrema = depths[pressure_persistence_pairs[1][0]]
+        i = 1
+        while i < len(depths) and depths[i] < smallest_extrema * 0.3:
+            i += 1
+        trunc_at_start = i
+        i = len(depths) - 1
+        while i > trunc_at_start and depths[i] < smallest_extrema * 0.3:
+            i -= 1
+        trunc_at_end = i
+    else:
+        ppp = pressure_persistence_pairs[1:-1]
+        smallest_extrema = np.min([depths[_[0]] for _ in ppp])
+        i = 1
+        while i < len(depths) and depths[i] < smallest_extrema * 0.3:
+            i += 1
+        trunc_at_start = i
+        i = len(depths) - 1
+        while i > trunc_at_start and depths[i] < smallest_extrema * 0.6:
+            i -= 1
+        trunc_at_end = i
+
+    if len(points_x[trunc_at_start:trunc_at_end]) <= 0:
+        return None
+
+    # get discrete directions list
+    NUMBER_OF_POINTS_THRES = 15
+    LENGTH_THRES = 1.5
+    ANGLE_THRESHOLD = np.pi / 4
+
+    x = points_x[trunc_at_start:trunc_at_end]
+    y = points_y[trunc_at_start:trunc_at_end]
+    d = depths[trunc_at_start:trunc_at_end]
+
+    ext_directions = [
+        getSingleDirectionConfidenceList((x[_] - x[_ - 1], y[_] - y[_ - 1]), 6,
+                                         None)[0][0] for _ in range(1, len(x))
+    ]
+    collected = []
+    collected_corners = []
+    i = 0
+    while (i < len(ext_directions)):
+        current_direction = ext_directions[i]
+        j = i
+        while (j < len(ext_directions)
+               and ext_directions[j] == current_direction):
+            j += 1
+        k = j
+        while (k < len(ext_directions)):
+            if (angleDistLinear(DIRECTIONS_MAP['6'][current_direction],
+                                DIRECTIONS_MAP['6'][ext_directions[k]]) >
+                    np.pi / 2):
+                break
+            while (k < len(ext_directions)
+                   and ext_directions[k] == ext_directions[j]):
+                k += 1
+            angle_diff = angleDiffLinear((x[j] - x[i], y[j] - y[i]),
+                                         (x[k] - x[j], y[k] - y[j]))
+            if angle_diff > ANGLE_THRESHOLD:
+                break
+            current_direction = getSingleDirectionConfidenceList(
+                (x[k] - x[i], y[k] - y[i]), 6, None)[0][0]
+            j = k
+        if j - i >= NUMBER_OF_POINTS_THRES and np.sqrt(
+            (x[j] - x[i])**2 + (y[j] - y[i])**2) > LENGTH_THRES:
+            if (len(collected) > 0 and collected[-1] == current_direction):
+                last_i, last_j = collected_corners[-1]
+                collected_corners[-1] = (last_i, j)
+            else:
+                collected.append(current_direction)
+                collected_corners.append((i, j))
+        i = j
+
+    END_LENGTH_THRES = 0.4
+
+    if (len(collected_corners) >= 2):
+        if (np.sqrt(
+            (x[collected_corners[0][0]] - x[collected_corners[0][1]])**2 +
+            (y[collected_corners[0][0]] -
+             y[collected_corners[0][1]])**2) / np.sqrt(
+                 (x[collected_corners[1][0]] - x[collected_corners[1][1]])**2 +
+                 (y[collected_corners[1][0]] - y[collected_corners[1][1]])**2)
+                < END_LENGTH_THRES):
+            collected.pop(0)
+            collected_corners.pop(0)
+
+    if (len(collected_corners) >= 2):
+        if (np.sqrt(
+            (x[collected_corners[-1][0]] - x[collected_corners[-1][1]])**2 +
+            (y[collected_corners[-1][0]] - y[collected_corners[-1][1]])**2
+        ) / np.sqrt(
+            (x[collected_corners[-2][0]] - x[collected_corners[-2][1]])**2 +
+            (y[collected_corners[-2][0]] - y[collected_corners[-2][1]])**2) <
+                END_LENGTH_THRES):
+            collected.pop(-1)
+            collected_corners.pop(-1)
+
+    if len(collected) <= 0:
+        return None
+
+    # dynamic time warping
+    candi_q = []
+    for ch in LETTER:
+        std_directions = DIRECTION_PATTERN6[ch]
+        d, cost_matrix, acc_cost_matrix, warping_path = dtw(
+            collected,
+            std_directions,
+            dist=angleDistMatrix,
+            w=abs(len(collected) - len(std_directions)),
+            s=2)
+        candi_q.append((d, ch))
+    candi_q.sort()
+    return candi_q[0][1]
+
+
+def predictAllInOneWithAvgPath(x, y, d):
+    # get average path
+    points_x = []
+    points_y = []
+    depths = []
+
+    threshold = 200
+    for i in range(len(x)):
+        if d[i] > threshold:
+            points_x.append(x[i])
+            points_y.append(y[i])
+            depths.append(d[i])
 
     if len(depths) <= 0:
         return None

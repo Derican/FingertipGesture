@@ -3745,7 +3745,7 @@ def getDirections6(path, person, debug=False):
     R_SQUARED_THRES = 0.9
     ANGLE_THRESHOLD = np.pi / 4
 
-    x, y, d = getAveragePath(path)
+    x, y, d = getAveragePath(path, truncate=True)
     x = gaussian_filter1d(x, sigma=8)
     y = gaussian_filter1d(y, sigma=8)
     ext_directions = [
@@ -3799,6 +3799,7 @@ def getDirections6(path, person, debug=False):
     if debug:
         print("collected: ", collected, collected_corners)
 
+    START_LENGTH_THRES = 0.3
     END_LENGTH_THRES = 0.4
 
     if (len(collected_corners) >= 2):
@@ -3808,7 +3809,7 @@ def getDirections6(path, person, debug=False):
              y[collected_corners[0][1]])**2) / np.sqrt(
                  (x[collected_corners[1][0]] - x[collected_corners[1][1]])**2 +
                  (y[collected_corners[1][0]] - y[collected_corners[1][1]])**2)
-                < END_LENGTH_THRES):
+                < START_LENGTH_THRES):
             if debug:
                 print(
                     "ignore start, ratio: ",
@@ -3854,13 +3855,22 @@ def getDirections6(path, person, debug=False):
 # CONFUSION_MATRIX = [[0, 1, 5, 5, 5, 1], [1, 0, 2, 5, 5, 5], [5, 2, 0, 1, 5, 5],
 #                     [5, 5, 1, 0, 1, 5], [5, 5, 5, 1, 0, 2], [1, 5, 5, 5, 2, 0]]
 
+# CONFUSION_MATRIX = [
+#     [0.22261291, 2.2732943, 4.6507807, 4.07541655, 4.90209513, 2.77046783],
+#     [3.00296413, 0.12885289, 3.27995091, 4.73220324, 3.69611131, np.inf],
+#     [3.25809654, 3.91487607, 0.14375852, 3.78134468, 3.15273602, 4.60802325],
+#     [3.57939522, 3.29171315, 2.42671571, 0.24983972, 2.83218082, 4.73516592],
+#     [5.45425217, 3.17698488, 5.74193424, 4.35563988, 0.08594243, 3.89610755],
+#     [3.14988295, 5.75257264, 3.55534806, 2.75684037, 2.66153019, 0.23311372]
+# ]
+
 CONFUSION_MATRIX = [
-    [0., 2.2732943, 4.6507807, 4.07541655, 4.90209513, 2.77046783],
-    [3.00296413, 0., 3.27995091, 4.73220324, 3.69611131, np.inf],
-    [3.25809654, 3.91487607, 0., 3.78134468, 3.15273602, 4.60802325],
-    [3.57939522, 3.29171315, 2.42671571, 0., 2.83218082, 4.73516592],
-    [5.45425217, 3.17698488, 5.74193424, 4.35563988, 0., 3.89610755],
-    [3.14988295, 5.75257264, 3.55534806, 2.75684037, 2.66153019, 0.]
+    [0.17410147, 2.43234432, np.inf, np.inf, np.inf, 2.63167722],
+    [3.14908899, 0.07673867, 3.5545541, np.inf, 6.03946075, np.inf],
+    [np.inf, 4.48441398, 0.02282553, 4.48441398, np.inf, np.inf],
+    [7.59034695, 6.89719977, 2.50275061, 0.15490893, 2.81122345, np.inf],
+    [6.15273269, 6.84587988, 6.84587988, 4.4479846, 0.0171678, 6.84587988],
+    [3.67471714, np.inf, np.inf, 5.34869357, 2.7337338, 0.09991665],
 ]
 
 
@@ -3948,8 +3958,9 @@ class PersonalConfusionMatrix:
         for i in range(6):
             total = np.sum(confusion_dict[person][i])
             for j in range(6):
-                self.matrix[i].append(-np.log(confusion_dict[person][i][j] / total) if
-                                    confusion_dict[person][i][j] != 0 else np.inf)
+                self.matrix[i].append(
+                    -np.log(confusion_dict[person][i][j] / total)
+                    if confusion_dict[person][i][j] != 0 else np.inf)
 
     def dist(self, u, v):
         return self.matrix[v][u]
@@ -4039,9 +4050,9 @@ def calculate(person):
                     std_directions,
                     # dist=PersonalGaussianDist(
                     #     person if personal else None).dist,
-                    # dist=angleDist,
-                    dist=PersonalConfusionMatrix(
-                        person if personal else person + '1').dist,
+                    dist=angleDist,
+                    # dist=PersonalConfusionMatrix(
+                    #     person if personal else person + '1').dist,
                     w=abs(len(path_directions) - len(std_directions)),
                     s=2)
                 candi_q.append((d, ch))
@@ -4128,7 +4139,7 @@ def calPatternAcc6():
 
 def calPatternAcc6SingleProc():
 
-    for person in ['jjx']:
+    for person in ['zyw']:
         calculate(person)
 
 
